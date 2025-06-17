@@ -2,6 +2,7 @@ import os
 import random
 import json
 import openai
+import httpx # Import httpx explicitly
 from flask import Flask, request, jsonify, render_template
 from langdetect import detect
 
@@ -54,7 +55,7 @@ last_bot_reply_global = ""
 def random_card_intro():
     intros = [
         "Let's see what the cards say…",
-        "Pulling a fresh card for you! 🔮",
+        "Pulling a fresh card for you! �",
         "Checking your tarot energy…",
         "Alright, let me focus and draw a card…",
         "Hmm, let's tune into your vibe for a sec…",
@@ -107,8 +108,11 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
             )}
         ]
         try:
-            # CORRECTED: Ensure no 'proxies' argument is passed here
-            client = openai.OpenAI(api_key=openai.api_key)
+            # Create an httpx client that explicitly disables environment proxy usage
+            http_client = httpx.Client(proxies={})
+            # Pass the custom http_client to OpenAI
+            client = openai.OpenAI(api_key=openai.api_key, http_client=http_client)
+            
             response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=messages
@@ -162,8 +166,11 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
     ]
 
     try:
-        # CORRECTED: Ensure no 'proxies' argument is passed here
-        client = openai.OpenAI(api_key=openai.api_key)
+        # Create an httpx client that explicitly disables environment proxy usage
+        http_client = httpx.Client(proxies={})
+        # Pass the custom http_client to OpenAI
+        client = openai.OpenAI(api_key=openai.api_key, http_client=http_client)
+        
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=messages
