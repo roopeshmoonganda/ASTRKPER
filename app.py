@@ -1,6 +1,6 @@
 import os
 import json
-from flask import Flask, render_template, request, session
+from flask import Flask, request, session, send_file
 import openai
 
 openai.api_key = os.environ.get("OPENAI_API_KEY")
@@ -8,14 +8,14 @@ openai.api_key = os.environ.get("OPENAI_API_KEY")
 app = Flask(__name__)
 app.secret_key = "your_secret_key"  # Replace with a random string for production
 
-# Load tarot cards
+# Load tarot cards from root directory
 with open('card_data.json', 'r', encoding='utf-8') as f:
     tarot_cards = json.load(f)
 
 @app.route('/')
 def index():
-    session.setdefault("history", [])
-    return render_template('chat.html')
+    # Serve chat.html directly from root
+    return send_file('chat.html')
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -28,7 +28,7 @@ def chat():
     system_prompt = (
         "You are a warm, friendly tarot reader for chat. "
         "If the user's message is a NEW, stand-alone question, pull a tarot card and give a reading. "
-        "If the message is a FOLLOW-UP or asking for more steps, tips, or clarification, do NOT pull a new card, just elaborate helpfully."
+        "If the message is a FOLLOW-UP or asking for more steps, tips, or clarification, do NOT pull a new card, just elaborate helpfully. "
         "Always end with a practical, helpful action. "
         "Use simple English, Hinglish, or Hindi as the user prefers. Group sentences like chat, not big paragraphs."
     )
