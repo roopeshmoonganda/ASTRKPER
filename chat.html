@@ -225,7 +225,7 @@
             showTypingIndicator(); // Show typing indicator
 
             try {
-                // Changed to send JSON data, as indicated by your logs
+                // Sending JSON data with 'message' key
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: {
