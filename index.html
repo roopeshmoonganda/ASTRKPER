@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Roopesh - Your Tarot Advisor</title>
+    <title>Roopesh - Your Tarot Advisor 🔮</title>
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
@@ -225,12 +225,13 @@
             showTypingIndicator(); // Show typing indicator
 
             try {
+                // Changed to send JSON data, as indicated by your logs
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json' // Set Content-Type to JSON
                     },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify({ message: message }) // Send data as JSON object
                 });
                 const data = await response.json();
 
@@ -239,7 +240,6 @@
                 if (data.replies && Array.isArray(data.replies)) {
                     // Simulate natural chat by sending messages in groups with delay
                     for (let i = 0; i < data.replies.length; i++) {
-                        // Human-like pause (longer for longer lines, but max 4 sec)
                         const part = data.replies[i];
                         const words = part.split(' ').length;
                         const delay = Math.min(Math.max(words * 70, 500), 4000); // ms
@@ -247,10 +247,8 @@
                         await new Promise(resolve => setTimeout(resolve, delay));
                         appendMessage('bot', part);
                     }
-                } else if (data.reply) {
-                    // Fallback if 'replies' array is not used for some reason
-                    appendMessage('bot', data.reply);
                 } else {
+                    // Fallback if 'replies' array is not used
                     appendMessage('bot', 'Oops! Something went wrong getting a response.');
                 }
             } catch (error) {
