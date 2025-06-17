@@ -1,6 +1,6 @@
 import os
 import json
-from flask import Flask, request, session, send_file
+from flask import Flask, request, session, send_file, jsonify
 import openai
 
 openai.api_key = os.environ.get("OPENAI_API_KEY")
