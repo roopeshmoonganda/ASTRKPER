@@ -200,12 +200,22 @@ def index():
 @app.route('/chat', methods=['POST'])
 def chat():
     """Handles chat messages from the frontend."""
+    # Add debug prints to inspect the incoming request
+    print(f"Incoming Request Headers: {request.headers}")
+    print(f"Request Content-Type: {request.headers.get('Content-Type')}")
+    print(f"Request Data (raw): {request.get_data(as_text=True)}") # Get raw body data
+    print(f"Request Form: {request.form}")
+    print(f"Request JSON: {request.json}") # Will be None if Content-Type is not application/json
+
     # Use session to maintain conversation history for each user
     if "history" not in session:
         session["history"] = []
 
     user_message = request.form.get('msg') # Expecting form data from frontend
+    
     if not user_message:
+        # Log why it's empty
+        print(f"User message is empty. request.form: {request.form}")
         return jsonify({"replies": ["Please send a message."]}), 400
 
     print(f"User: {user_message}")
