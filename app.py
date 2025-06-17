@@ -2,13 +2,12 @@ import os
 import random
 import json
 import openai
-from flask import Flask, request, jsonify, send_file, session # Added send_file and session
+from flask import Flask, request, jsonify, send_file, session
 from langdetect import detect
 
 # Initialize Flask app
 app = Flask(__name__)
 # IMPORTANT: Flask session requires a secret key for security.
-# It encrypts/signs session data to prevent tampering.
 # Get it from environment variable, provide a fallback for dev, but set for production!
 app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 
@@ -108,7 +107,7 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
             )}
         ]
         try:
-            # DIRECT OPENAI CALL: This is the method you confirmed was working
+            # DIRECT OPENAI CALL: Using openai.chat.completions.create directly
             response = openai.chat.completions.create(
                 model="gpt-4o",
                 messages=messages_for_llm
@@ -155,7 +154,7 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
     ]
 
     try:
-        # DIRECT OPENAI CALL: This is the method you confirmed was working
+        # DIRECT OPENAI CALL: Using openai.chat.completions.create directly
         response = openai.chat.completions.create(
             model="gpt-4o",
             messages=messages_for_llm
@@ -211,7 +210,7 @@ def chat():
     if "history" not in session:
         session["history"] = []
 
-    # --- CHANGED: Expecting JSON data based on your logs ---
+    # Expecting JSON data based on your logs
     user_message = None
     if request.is_json:
         user_message = request.json.get('message')
