@@ -243,13 +243,14 @@
                 if (data.replies && Array.isArray(data.replies)) {
                     // Simulate natural chat by sending messages in groups with delay
                     for (let i = 0; i < data.replies.length; i++) {
-                        const part = data.replies[i];
-                        const words = part.split(' ').length;
-                        const delay = Math.min(Math.max(words * 70, 500), 4000); // ms
+    const part = data.replies[i];
+    const words = part.split(' ').length;
+    // Slow down: make each word worth 220ms, min 1500ms, max 6000ms
+    const delay = Math.min(Math.max(words * 220, 1500), 6000);
 
-                        await new Promise(resolve => setTimeout(resolve, delay));
-                        appendMessage('bot', part);
-                    }
+    await new Promise(resolve => setTimeout(resolve, delay));
+    appendMessage('bot', part);
+}
                 } else {
                     // Fallback if 'replies' array is not used
                     appendMessage('bot', 'Oops! Something went wrong getting a response.');
