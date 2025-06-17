@@ -211,11 +211,17 @@ def chat():
     if "history" not in session:
         session["history"] = []
 
-    user_message = request.form.get('msg') # Expecting form data from frontend
+    # --- CHANGED: Expecting JSON data based on your logs ---
+    user_message = None
+    if request.is_json:
+        user_message = request.json.get('message')
+    else:
+        # Fallback for form data, though logs indicate JSON is being sent
+        user_message = request.form.get('msg')
     
     if not user_message:
         # Log why it's empty
-        print(f"User message is empty. request.form: {request.form}")
+        print(f"User message is empty. request.form: {request.form}, request.json: {request.json}")
         return jsonify({"replies": ["Please send a message."]}), 400
 
     print(f"User: {user_message}")
