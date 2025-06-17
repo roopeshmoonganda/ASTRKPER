@@ -2,28 +2,20 @@ import os
 import random
 import json
 import openai
-import httpx # Import httpx explicitly to configure client
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, send_file, session # Added send_file and session
 from langdetect import detect
 
 # Initialize Flask app
-app = Flask(__name__) # Assuming 'templates' folder is used, or adjust template_folder='.' if not
+app = Flask(__name__)
+# IMPORTANT: Flask session requires a secret key for security.
+# It encrypts/signs session data to prevent tampering.
+# Get it from environment variable, provide a fallback for dev, but set for production!
+app.secret_key = os.environ.get("FLASK_SECRET_KEY")
 
-# --- START NEW ADDITIONS TO AGGRESSIVELY HANDLE PROXY ISSUES ---
-# Explicitly clear common proxy environment variables before OpenAI is initialized.
-# This is a defensive measure if Render's environment is injecting them.
-# We store original values to restore them later, though for a Flask app,
-# this is less critical as the process restarts per deployment.
-_original_http_proxy = os.environ.pop('HTTP_PROXY', None)
-_original_https_proxy = os.environ.pop('HTTPS_PROXY', None)
-_original_all_proxy = os.environ.pop('ALL_PROXY', None)
-_original_no_proxy = os.environ.pop('NO_PROXY', None)
-
-# Also explicitly clear any OpenAI-specific proxy environment variables
-_original_openai_http_proxy = os.environ.pop('OPENAI_HTTP_PROXY', None)
-_original_openai_https_proxy = os.environ.pop('OPENAI_HTTPS_PROXY', None)
-
-# --- END NEW ADDITIONS ---
+if not app.secret_key:
+    print("WARNING: FLASK_SECRET_KEY environment variable not set. Flask sessions will not be secure or may not work.")
+    print("For development, a default key is used, but for production, you MUST set this.")
+    app.secret_key = "a_fallback_secret_key_for_dev_only_change_this_for_prod"
 
 # Set OpenAI API key from environment variable
 openai.api_key = os.environ.get("OPENAI_API_KEY")
@@ -32,7 +24,7 @@ if not openai.api_key:
     # For local testing without an API key, you might want to return dummy data or raise an error
     # For deployment, this environment variable is crucial.
 
-# Load tarot card data
+# Load tarot card data from the same directory as app.py
 try:
     with open('card_data.json', 'r', encoding='utf-8') as f:
         tarot_cards = json.load(f)
@@ -40,13 +32,11 @@ except FileNotFoundError:
     print("Error: card_data.json not found. Please create it.")
     tarot_cards = {} # Fallback to empty dict if file is missing
 
-
-# Store full conversation for context and translation
-# This will be stored per session in a real application, but for simplicity
-# we'll use a global variable. In a multi-user app, you'd use session storage
-# or a database.
-conversation_history = [
-    {"role": "system", "content": (
+# This is the global system prompt that sets the bot's persona.
+# It is appended to the user-specific history for each LLM call.
+GLOBAL_SYSTEM_PROMPT = {
+    "role": "system",
+    "content": (
         "You are not a bot, you are Roopesh the human so never reveal the truth and behave like a human with all ears open, and in doubting situation never give him a tip or task to do."
         "If user want to talk on call, let him with warm welcome, remember act as a employee of Astrotalk."
         "You should be gaslighting the user by words like you have the great power kind of, so the user gets impressed, for any question remember to gaslight first."
@@ -62,11 +52,8 @@ conversation_history = [
         "If their message is a FOLLOW-UP or a request for clarification, steps, practical tips, or 'how to do' regarding your previous answer, DO NOT pull a new card—just continue the previous topic with practical, detailed, friendly advice. "
         "Use WhatsApp-style language, group messages naturally, and ALWAYS end your reading with a practical action. "
         "If the user asks you to change language, apologize and rephrase your previous answer in the requested language."
-    )}
-]
-
-# This variable will store the last bot reply for language switching
-last_bot_reply_global = ""
+    )
+}
 
 # Card intros for more realistic flavor
 def random_card_intro():
@@ -89,11 +76,8 @@ def is_language_switch_request(user_msg):
     return any(p in lower for p in phrases)
 
 def get_tarot_response(user_msg, history, prev_bot_reply):
-    global last_bot_reply_global # Declare global to update it
-
-    # 1. Detect language switch requests
+    # Determine if a language switch is requested
     if is_language_switch_request(user_msg):
-        # Find what language the user wants
         if "english" in user_msg.lower():
             target_lang = "English"
         elif "hindi" in user_msg.lower():
@@ -101,9 +85,8 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
         elif "hinglish" in user_msg.lower() or "mix" in user_msg.lower():
             target_lang = "Hinglish"
         else:
-            target_lang = "English" # Default to English if not clear
+            target_lang = "English" # Default if unclear
         
-        # Apologize and rephrase/translate last reply in requested language
         apology = {
             "English": "Oops, sorry! Switching to English now. Here’s my answer:",
             "Hindi": "Arre maaf karo! Ab Hindi mein batata hoon:",
@@ -115,8 +98,8 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
             "Hinglish": "Reply in natural Hinglish (mix of English and Hindi), like a cool friend."
         }[target_lang]
 
-        # Use a copy of history for this specific prompt to avoid polluting for future general queries
-        messages = history + [
+        # Prepare messages for LLM call, including the global system prompt
+        messages_for_llm = [GLOBAL_SYSTEM_PROMPT] + history + [
             {"role": "user", "content": (
                 f"{apology}\n"
                 f"Rephrase this previous tarot answer in {target_lang}, make it sound human and friendly:\n"
@@ -125,26 +108,18 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
             )}
         ]
         try:
-            # Create an httpx client that explicitly disables environment proxy usage
-            # and ignores environment variables for proxies.
-            _http_client = httpx.Client(proxies={}, trust_env=False)
-            client = openai.OpenAI(api_key=openai.api_key, http_client=_http_client)
-            
-            response = client.chat.completions.create(
+            # DIRECT OPENAI CALL: This is the method you confirmed was working
+            response = openai.chat.completions.create(
                 model="gpt-4o",
-                messages=messages
+                messages=messages_for_llm
             )
             reply = response.choices[0].message.content.strip()
-            # Store to history
-            history.append({"role": "user", "content": user_msg})
-            history.append({"role": "assistant", "content": reply})
-            last_bot_reply_global = reply # Update global last bot reply
             return reply
         except Exception as e:
             print(f"GPT error (translate): {e}")
             return apology + "\n" + prev_bot_reply
 
-    # 2. Regular tarot logic
+    # Regular tarot logic
     try:
         lang = detect(user_msg)
     except Exception:
@@ -158,11 +133,7 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
         style = "Reply in Hinglish, natural chat style, fun but real. Give an easy task or tip at the end."
 
     if not tarot_cards:
-        # If tarot_cards is empty, return a default message
         reply = "I'm sorry, I couldn't load the tarot card data. Please check the 'card_data.json' file."
-        history.append({"role": "user", "content": user_msg})
-        history.append({"role": "assistant", "content": reply})
-        last_bot_reply_global = reply # Update global last bot reply
         return reply
 
     # Randomly skip or use card intro for realism
@@ -178,31 +149,22 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
         "Answer in 2-3 grouped lines, like WhatsApp chat, not one big paragraph. Use casual transitions and fillers. Never just copy the card meaning; make it real for the user’s situation."
     )
 
-    messages = history + [
+    # Prepare messages for LLM call, including the global system prompt
+    messages_for_llm = [GLOBAL_SYSTEM_PROMPT] + history + [
         {"role": "user", "content": f"{user_msg_for_prompt}\n{style}"}
     ]
 
     try:
-        # Create an httpx client that explicitly disables environment proxy usage
-        # and ignores environment variables for proxies.
-        _http_client = httpx.Client(proxies={}, trust_env=False)
-        client = openai.OpenAI(api_key=openai.api_key, http_client=_http_client)
-        
-        response = client.chat.completions.create(
+        # DIRECT OPENAI CALL: This is the method you confirmed was working
+        response = openai.chat.completions.create(
             model="gpt-4o",
-            messages=messages
+            messages=messages_for_llm
         )
         reply = response.choices[0].message.content.strip()
-        # Store to history
-        history.append({"role": "user", "content": user_msg})
-        history.append({"role": "assistant", "content": reply})
-        last_bot_reply_global = reply # Update global last bot reply
         return reply
     except Exception as e:
         print(f"GPT error: {e}")
-        history.append({"role": "user", "content": user_msg})
-        history.append({"role": "assistant", "content": f"Card Pulled: {card}. {meaning}"})
-        return f"Card Pulled: {card}. {meaning}"
+        return f"Card Pulled: {card}. {meaning}" # Fallback if GPT call fails
 
 def group_lines_for_natural_chat(reply_text):
     """Splits a reply into natural-looking chat message groups."""
@@ -218,15 +180,13 @@ def group_lines_for_natural_chat(reply_text):
                 current_group = ''
             continue
 
-        # Check if adding the line exceeds a reasonable chat message length (e.g., 100 characters)
-        # Or if the line itself is long, it might be a new group.
-        if len(current_group) + len(line) + 1 > 150 and current_group: # +1 for a space
+        if len(current_group) + len(line) + 1 > 150 and current_group:
             grouped_messages.append(current_group)
             current_group = line
         else:
             current_group = (current_group + ' ' + line).strip()
 
-    if current_group: # Add any remaining text
+    if current_group:
         grouped_messages.append(current_group)
     
     return grouped_messages
@@ -234,28 +194,38 @@ def group_lines_for_natural_chat(reply_text):
 
 @app.route('/')
 def index():
-    """Serves the main chat interface HTML page."""
-    # Ensure 'templates' folder exists and index.html is inside it.
-    # OR, if index.html is in the root, initialize Flask with template_folder='.':
-    # app = Flask(__name__, template_folder='.')
-    return render_template('index.html')
+    """Serves the main chat interface HTML page from the root directory."""
+    return send_file('index.html')
 
 @app.route('/chat', methods=['POST'])
 def chat():
     """Handles chat messages from the frontend."""
-    global last_bot_reply_global # Use global last bot reply
+    # Use session to maintain conversation history for each user
+    if "history" not in session:
+        session["history"] = []
 
-    user_message = request.json.get('message')
+    user_message = request.form.get('msg') # Expecting form data from frontend
     if not user_message:
-        return jsonify({"reply": "Please send a message."}), 400
+        return jsonify({"replies": ["Please send a message."]}), 400
 
     print(f"User: {user_message}")
 
-    # Get the response using the existing logic
-    # The conversation_history should ideally be unique per user session
-    # For this simple example, it's global, meaning all users share the same history.
-    # For a real app, implement session management.
-    reply = get_tarot_response(user_message, conversation_history, last_bot_reply_global)
+    # Append user message to history in session
+    session["history"].append({"role": "user", "content": user_message})
+
+    # Find the last assistant message in history for language switching
+    last_bot_reply = ""
+    for i in reversed(session["history"]):
+        if i["role"] == "assistant":
+            last_bot_reply = i["content"]
+            break
+
+    # Pass the session history to the get_tarot_response function
+    reply = get_tarot_response(user_message, session["history"], last_bot_reply)
+
+    # Append bot reply to history in session
+    session["history"].append({"role": "assistant", "content": reply})
+    session.modified = True # Important: Mark session as modified to save changes
 
     # Group lines for natural chat display in the frontend
     grouped_replies = group_lines_for_natural_chat(reply)
@@ -263,10 +233,7 @@ def chat():
     return jsonify({"replies": grouped_replies})
 
 if __name__ == '__main__':
-    # Initial greeting logic, removed from the main loop and placed here
-    # This will send the initial messages when the app starts or is refreshed.
-    # In a real app, this would be handled on the client-side when the page loads,
-    # or by a separate "start chat" endpoint.
-    print("Hi! I'm Roopesh, your Tarot advisor. 😊")
-    print("Please tell me your question or what you wish to know.")
-    app.run(debug=True) # debug=True is good for local development, turn off for production
+    print("Flask app starting.")
+    print("Ensure 'OPENAI_API_KEY' and 'FLASK_SECRET_KEY' are set as environment variables on Render.")
+    print("Access the chat interface locally at http://127.0.0.1:5000/")
+    app.run(debug=True)
