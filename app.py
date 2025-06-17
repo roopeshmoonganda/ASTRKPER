@@ -2,12 +2,35 @@ import os
 import random
 import json
 import openai
-# httpx is no longer explicitly imported here if not used directly
+import httpx # Import httpx explicitly to configure client
 from flask import Flask, request, jsonify, render_template
 from langdetect import detect
 
 # Initialize Flask app
 app = Flask(__name__) # Assuming 'templates' folder is used, or adjust template_folder='.' if not
+
+# --- START NEW ADDITIONS TO AGGRESSIVELY HANDLE PROXY ISSUES ---
+# Explicitly clear common proxy environment variables before OpenAI is initialized.
+# This is a defensive measure if Render's environment is injecting them.
+# We store original values to restore them later, though for a Flask app,
+# this is less critical as the process restarts per deployment.
+_original_http_proxy = os.environ.pop('HTTP_PROXY', None)
+_original_https_proxy = os.environ.pop('HTTPS_PROXY', None)
+_original_all_proxy = os.environ.pop('ALL_PROXY', None)
+_original_no_proxy = os.environ.pop('NO_PROXY', None)
+
+# Also explicitly clear any OpenAI-specific proxy environment variables
+_original_openai_http_proxy = os.environ.pop('OPENAI_HTTP_PROXY', None)
+_original_openai_https_proxy = os.environ.pop('OPENAI_HTTPS_PROXY', None)
+
+# --- END NEW ADDITIONS ---
+
+# Set OpenAI API key from environment variable
+openai.api_key = os.environ.get("OPENAI_API_KEY")
+if not openai.api_key:
+    print("Warning: OPENAI_API_KEY environment variable not set. Please set it for OpenAI API to work.")
+    # For local testing without an API key, you might want to return dummy data or raise an error
+    # For deployment, this environment variable is crucial.
 
 # Load tarot card data
 try:
@@ -17,12 +40,6 @@ except FileNotFoundError:
     print("Error: card_data.json not found. Please create it.")
     tarot_cards = {} # Fallback to empty dict if file is missing
 
-# Set OpenAI API key from environment variable
-openai.api_key = os.environ.get("OPENAI_API_KEY")
-if not openai.api_key:
-    print("Warning: OPENAI_API_KEY environment variable not set. Please set it for OpenAI API to work.")
-    # For local testing without an API key, you might want to return dummy data or raise an error
-    # For deployment, this environment variable is crucial.
 
 # Store full conversation for context and translation
 # This will be stored per session in a real application, but for simplicity
@@ -108,8 +125,10 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
             )}
         ]
         try:
-            # Removed explicit http_client to test if it resolves the issue
-            client = openai.OpenAI(api_key=openai.api_key)
+            # Create an httpx client that explicitly disables environment proxy usage
+            # and ignores environment variables for proxies.
+            _http_client = httpx.Client(proxies={}, trust_env=False)
+            client = openai.OpenAI(api_key=openai.api_key, http_client=_http_client)
             
             response = client.chat.completions.create(
                 model="gpt-4o",
@@ -164,8 +183,10 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
     ]
 
     try:
-        # Removed explicit http_client to test if it resolves the issue
-        client = openai.OpenAI(api_key=openai.api_key)
+        # Create an httpx client that explicitly disables environment proxy usage
+        # and ignores environment variables for proxies.
+        _http_client = httpx.Client(proxies={}, trust_env=False)
+        client = openai.OpenAI(api_key=openai.api_key, http_client=_http_client)
         
         response = client.chat.completions.create(
             model="gpt-4o",
