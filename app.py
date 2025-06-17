@@ -19,9 +19,8 @@ def index():
 
 @app.route('/chat', methods=['POST'])
 def chat():
-    user_msg = request.form['msg']
+    user_msg = request.form.get('msg')
     history = session.get("history", [])
-    # Add user message to history
     history.append({"role": "user", "content": user_msg})
 
     # Prepare OpenAI prompt with history
@@ -48,10 +47,11 @@ def chat():
         messages=messages
     )
     bot_reply = response.choices[0].message.content.strip()
-    # Add bot reply to history
+    # Split the reply into parts at double line breaks
+    reply_parts = [part.strip() for part in bot_reply.split('\n\n') if part.strip()]
     history.append({"role": "assistant", "content": bot_reply})
     session["history"] = history
-    return bot_reply
+    return jsonify({"replies": reply_parts})
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
