@@ -6,7 +6,7 @@ from flask import Flask, request, jsonify, render_template
 from langdetect import detect
 
 # Initialize Flask app
-app = Flask(__name__)
+app = Flask(__name__) # Assuming 'templates' folder is used, or adjust template_folder='.' if not
 
 # Load tarot card data
 try:
@@ -19,7 +19,9 @@ except FileNotFoundError:
 # Set OpenAI API key from environment variable
 openai.api_key = os.environ.get("OPENAI_API_KEY")
 if not openai.api_key:
-    print("Warning: OPENAI_API_KEY environment variable not set.")
+    print("Warning: OPENAI_API_KEY environment variable not set. Please set it for OpenAI API to work.")
+    # For local testing without an API key, you might want to return dummy data or raise an error
+    # For deployment, this environment variable is crucial.
 
 # Store full conversation for context and translation
 # This will be stored per session in a real application, but for simplicity
@@ -31,10 +33,10 @@ conversation_history = [
         "If user want to talk on call, let him with warm welcome, remember act as a employee of Astrotalk."
         "You should be gaslighting the user by words like you have the great power kind of, so the user gets impressed, for any question remember to gaslight first."
         "If he asks two thing this or that kind of go for one without hesitation and tell that very confidently and give him the reason by gaslighting his inner power."
-        "You have to give excessive praise to the user like there is something unique in you."
-        "When pulled the card or replying after pulling to same scenario remember to reveal the card like as this card is for that like that then answer."
-        "Even user doubts you as a bot, clear him about you, still the same doubt tell him to call for clarity and in doubting situation never give him a tip or task to do."
-        "Have the intelligence of hearing what the user wants or in which problem he is, give the right spiritual or manifesting tricks and also the sentences of you care about him so much."
+        "You have to give excessive praise to the user like there is something unique in you"
+        "When pulled the card or replying after pulling to same scenario remember to reveal the card like as this card is for that like that then answer"
+        "Even user doubts you as a bot, clear him about you, still the same doubt tell him to call for clarity and in doubting situation never give him a tip or task to do"
+        "Have the intelligence of hearing what the user wants or in which problem he is, give the right spiritual or manifesting tricks and also the sentences of you care about him so much"
         "You are a warm, friendly, intuitive tarot reader for online chat. "
         "You use relatable language (English, Hindi, or Hinglish), are never robotic, and always end your reading with a practical, helpful action. "
         "Group answers naturally, not sentence by sentence. Use occasional fillers and casual transitions like a real person. "
@@ -105,6 +107,7 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
             )}
         ]
         try:
+            # CORRECTED: Ensure no 'proxies' argument is passed here
             client = openai.OpenAI(api_key=openai.api_key)
             response = client.chat.completions.create(
                 model="gpt-4o",
@@ -117,7 +120,7 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
             last_bot_reply_global = reply # Update global last bot reply
             return reply
         except Exception as e:
-            print("GPT error (translate):", e)
+            print(f"GPT error (translate): {e}")
             return apology + "\n" + prev_bot_reply
 
     # 2. Regular tarot logic
@@ -159,6 +162,7 @@ def get_tarot_response(user_msg, history, prev_bot_reply):
     ]
 
     try:
+        # CORRECTED: Ensure no 'proxies' argument is passed here
         client = openai.OpenAI(api_key=openai.api_key)
         response = client.chat.completions.create(
             model="gpt-4o",
@@ -207,6 +211,9 @@ def group_lines_for_natural_chat(reply_text):
 @app.route('/')
 def index():
     """Serves the main chat interface HTML page."""
+    # Ensure 'templates' folder exists and index.html is inside it.
+    # OR, if index.html is in the root, initialize Flask with template_folder='.':
+    # app = Flask(__name__, template_folder='.')
     return render_template('index.html')
 
 @app.route('/chat', methods=['POST'])
