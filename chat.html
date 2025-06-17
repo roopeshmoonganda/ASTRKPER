@@ -225,13 +225,16 @@
             showTypingIndicator(); // Show typing indicator
 
             try {
-                // Sending JSON data with 'message' key
+                // Fixed to send form data as per your instruction
+                const formData = new URLSearchParams();
+                formData.append('msg', message); // Key is 'msg' as per app.py's request.form.get('msg')
+
                 const response = await fetch('/chat', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json' // Set Content-Type to JSON
+                        'Content-Type': 'application/x-www-form-urlencoded' // Explicitly set content type
                     },
-                    body: JSON.stringify({ message: message }) // Send data as JSON object
+                    body: formData.toString() // Send as URL-encoded form data
                 });
                 const data = await response.json();
 
