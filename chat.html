@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>RKPER AstroBot</title>
+    <style>
+        body { font-family: sans-serif; background: #151515; color: #fff; }
+        #chatbox { width: 95%; max-width: 500px; margin: 30px auto; background: #232323; border-radius: 12px; padding: 18px; min-height: 50vh; }
+        .user, .bot { margin: 10px 0; }
+        .user { color: #f7c873; text-align: right; }
+        .bot { color: #b0e57c; text-align: left; }
+        #input { width: 80%; padding: 10px; border-radius: 8px; border: none; }
+        #send { padding: 10px 18px; border-radius: 8px; border: none; background: #ff7700; color: #fff; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="chatbox">
+        <div id="messages"></div>
+        <form id="form" autocomplete="off">
+            <input id="input" name="msg" placeholder="Type your message..." autofocus>
+            <button id="send">Send</button>
+        </form>
+    </div>
+<script>
+    const form = document.getElementById('form');
+    const input = document.getElementById('input');
+    const messages = document.getElementById('messages');
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        const userText = input.value.trim();
+        if (!userText) return;
+        messages.innerHTML += `<div class="user"><b>You:</b> ${userText}</div>`;
+        input.value = '';
+        messages.scrollTop = messages.scrollHeight;
+        const res = await fetch('/chat', { method: "POST", body: new URLSearchParams({ msg: userText })});
+        const botText = await res.text();
+        messages.innerHTML += `<div class="bot"><b>AstroBot:</b> ${botText}</div>`;
+        messages.scrollTop = messages.scrollHeight;
+    };
+</script>
+</body>
+</html>
